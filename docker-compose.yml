@@ -1,0 +1,73 @@
+services:
+  backend:
+    build: .
+    env_file:
+      - .env.example
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      DATA_DIR: /app/data
+      RAW_DOCS_DIR: /app/data/raw_docs
+      VECTOR_DB_DIR: /app/data/vector_db
+      SQLITE_DB_PATH: /app/data/sqlite/app.db
+      VECTOR_STORE_TYPE: ${VECTOR_STORE_TYPE:-chroma}
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-sentence-transformers}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-small-zh-v1.5}
+      CHUNK_SIZE: ${CHUNK_SIZE:-800}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-120}
+      TOP_K: ${TOP_K:-5}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      API_MODEL_BASE_URL: ${API_MODEL_BASE_URL:-}
+      API_MODEL_API_KEY: ${API_MODEL_API_KEY:-}
+      API_MODEL_NAME: ${API_MODEL_NAME:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "3000:8080"
+    environment:
+      OPENAI_API_BASE_URL: http://backend:8000/v1
+      OPENAI_API_BASE_URLS: http://backend:8000/v1
+      OPENAI_API_KEY: mock-key
+      OPENAI_API_KEYS: mock-key
+    depends_on:
+      - backend
+    volumes:
+      - open-webui:/app/backend/data
+
+  mcp-server:
+    build: .
+    env_file:
+      - .env.example
+    command: ["uvicorn", "mcp_server.server:app", "--host", "0.0.0.0", "--port", "9000"]
+    environment:
+      DATA_DIR: /data
+      RAW_DOCS_DIR: /data/raw_docs
+      VECTOR_DB_DIR: /data/vector_db
+      SQLITE_DB_PATH: /data/sqlite/app.db
+      VECTOR_STORE_TYPE: ${VECTOR_STORE_TYPE:-chroma}
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-sentence-transformers}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-small-zh-v1.5}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./data:/data
+      - ./:/app
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  open-webui:
+  ollama:

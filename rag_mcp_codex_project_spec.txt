@@ -1,0 +1,1411 @@
+# Codex 项目开发说明书
+# 项目名称：基于 RAG 与 MCP 的垂直领域智能知识库问答平台
+# 适用场景：用于 AI 实习生岗位简历项目、GitHub 展示、面试讲解
+# 目标：请 Codex 根据本文档直接生成完整可运行项目
+
+你现在需要从零实现一个完整的 Python 工程项目，项目名称为：
+
+rag-mcp-knowledge-platform
+
+该项目是一个“基于 RAG 与 MCP 的垂直领域智能知识库问答平台”。项目需要具备工程化结构、可运行后端、文档上传、文档解析、文本切分、向量检索、RAG 问答、OpenWebUI 接入、MCP 工具调用、Docker Compose 一键部署、README 文档和测试用例。
+
+本项目用于放入简历，因此不要只写 demo 代码。请按真实工程项目方式实现，要求代码结构清晰、注释适中、异常处理完整、README 可读、接口可测试、可以在本地运行和截图展示。
+
+────────────────────────────────────────
+一、项目最终目标
+────────────────────────────────────────
+
+实现一个支持私有文档知识库问答的 AI 应用平台，用户可以上传 PDF、Word、Markdown、TXT 等文件，系统自动完成文档解析、文本切分、向量化、向量库构建，并在用户提问时通过 RAG 检索相关片段，再调用大模型生成回答。同时系统需要提供 OpenAI-compatible API，使 OpenWebUI 能够作为前端聊天界面接入该后端。项目还需要实现一个简单 MCP Server，提供知识库统计、本地文件读取、SQLite 笔记查询等工具能力。
+
+最终效果包括：
+
+1. FastAPI 后端可以启动；
+2. 可以上传文档；
+3. 可以构建知识库；
+4. 可以基于文档提问；
+5. 回答中包含引用来源；
+6. 可以通过 /v1/chat/completions 兼容 OpenWebUI；
+7. 可以通过 Docker Compose 启动 backend、open-webui、ollama；
+8. 有 MCP Server 示例工具；
+9. 有 README、接口文档、测试案例；
+10. 项目可以上传 GitHub 并写入简历。
+
+────────────────────────────────────────
+二、技术栈要求
+────────────────────────────────────────
+
+必须使用：
+
+1. Python 3.10+
+2. FastAPI
+3. Uvicorn
+4. LangChain 或 LangChain 相关组件
+5. FAISS 或 Chroma，优先使用 Chroma，FAISS 作为可选
+6. Hugging Face sentence-transformers embedding 模型
+7. pypdf
+8. python-docx
+9. SQLite
+10. Docker
+11. Docker Compose
+12. OpenWebUI
+13. Ollama，可作为本地模型服务
+14. MCP Python SDK 或者自实现一个简化 MCP Server 示例
+
+推荐使用的 Python 依赖：
+
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+chromadb
+sentence-transformers
+pypdf
+python-docx
+markdown
+requests
+httpx
+python-dotenv
+sqlalchemy
+aiofiles
+mcp
+ollama
+
+注意：
+如果某些依赖安装复杂，可以用轻量实现替代，但 README 中必须说明。项目首先保证能跑通。
+
+────────────────────────────────────────
+三、项目目录结构
+────────────────────────────────────────
+
+请严格按照以下结构生成项目：
+
+rag-mcp-knowledge-platform/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── health.py
+│   │   │   ├── chat.py
+│   │   │   ├── documents.py
+│   │   │   ├── knowledge.py
+│   │   │   └── openai_compatible.py
+│   │   ├── rag/
+│   │   │   ├── __init__.py
+│   │   │   ├── loader.py
+│   │   │   ├── splitter.py
+│   │   │   ├── embeddings.py
+│   │   │   ├── vector_store.py
+│   │   │   ├── retriever.py
+│   │   │   ├── prompt.py
+│   │   │   └── chain.py
+│   │   ├── llm/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py
+│   │   │   ├── ollama_client.py
+│   │   │   └── api_client.py
+│   │   ├── database/
+│   │   │   ├── __init__.py
+│   │   │   ├── db.py
+│   │   │   └── models.py
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── chat.py
+│   │   │   ├── document.py
+│   │   │   └── openai.py
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── logger.py
+│   │       ├── file_utils.py
+│   │       └── response.py
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   └── run.sh
+│
+├── mcp_server/
+│   ├── server.py
+│   ├── requirements.txt
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── file_tools.py
+│   │   ├── kb_tools.py
+│   │   └── db_tools.py
+│   └── README.md
+│
+├── data/
+│   ├── raw_docs/
+│   ├── vector_db/
+│   ├── sqlite/
+│   └── samples/
+│       ├── ai_interview_notes.md
+│       ├── rag_intro.txt
+│       └── software_engineering_notes.md
+│
+├── docs/
+│   ├── 项目说明.md
+│   ├── 接口文档.md
+│   ├── 测试案例.md
+│   ├── 简历描述.md
+│   └── 面试讲解稿.md
+│
+├── scripts/
+│   ├── init_db.py
+│   ├── build_sample_kb.py
+│   └── test_api.py
+│
+├── tests/
+│   ├── test_loader.py
+│   ├── test_splitter.py
+│   └── test_chat_api.py
+│
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── README.md
+└── LICENSE
+
+────────────────────────────────────────
+四、后端 FastAPI 要求
+────────────────────────────────────────
+
+backend/app/main.py 负责创建 FastAPI 应用，加载所有 router。
+
+需要注册以下路由：
+
+1. /health
+2. /api/documents
+3. /api/knowledge
+4. /api/chat
+5. /v1/models
+6. /v1/chat/completions
+
+启动命令：
+
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+后端基础配置写在 backend/app/config.py，使用 pydantic-settings 读取环境变量。
+
+配置项至少包括：
+
+APP_NAME = "RAG MCP Knowledge Platform"
+APP_ENV = "dev"
+DATA_DIR = "../data"
+RAW_DOCS_DIR = "../data/raw_docs"
+VECTOR_DB_DIR = "../data/vector_db"
+SQLITE_DB_PATH = "../data/sqlite/app.db"
+VECTOR_STORE_TYPE = "chroma"
+EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 120
+TOP_K = 5
+LLM_PROVIDER = "ollama"
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL = "qwen2.5:7b"
+API_MODEL_BASE_URL = ""
+API_MODEL_API_KEY = ""
+API_MODEL_NAME = "deepseek-chat"
+
+注意：
+默认使用 Ollama，但如果用户没有安装 Ollama，也应该可以通过 mock 模式或 API 模式运行基础接口。
+可以提供 LLM_PROVIDER = "mock" 用于无模型环境测试。
+
+────────────────────────────────────────
+五、接口设计
+────────────────────────────────────────
+
+1. 健康检查
+
+GET /health
+
+返回示例：
+
+{
+  "status": "ok",
+  "app": "RAG MCP Knowledge Platform",
+  "version": "0.1.0"
+}
+
+2. 上传文档
+
+POST /api/documents/upload
+
+请求：
+multipart/form-data
+file: PDF / DOCX / MD / TXT 文件
+
+返回：
+
+{
+  "code": 0,
+  "message": "document uploaded successfully",
+  "data": {
+    "doc_id": "uuid",
+    "filename": "rag_intro.txt",
+    "file_type": "txt",
+    "saved_path": "data/raw_docs/uuid_rag_intro.txt"
+  }
+}
+
+要求：
+- 支持 .pdf .docx .md .txt
+- 文件名需要安全处理
+- 保存时加 uuid 前缀
+- 超出支持类型返回 400
+- 上传成功后将文档元数据写入 SQLite
+
+3. 查看文档列表
+
+GET /api/documents
+
+返回：
+
+{
+  "code": 0,
+  "data": [
+    {
+      "doc_id": "uuid",
+      "filename": "rag_intro.txt",
+      "file_type": "txt",
+      "created_at": "2026-06-18 12:00:00"
+    }
+  ]
+}
+
+4. 构建知识库
+
+POST /api/knowledge/build
+
+请求：
+
+{
+  "doc_ids": ["uuid1", "uuid2"]
+}
+
+如果 doc_ids 为空，则构建全部已上传文档。
+
+流程：
+- 根据 doc_id 查找文档路径
+- 解析文档
+- 文本切分
+- embedding
+- 写入 Chroma 向量库
+- SQLite 记录 chunk 数量
+
+返回：
+
+{
+  "code": 0,
+  "message": "knowledge base built successfully",
+  "data": {
+    "document_count": 2,
+    "chunk_count": 38,
+    "vector_store": "chroma"
+  }
+}
+
+5. 知识库统计
+
+GET /api/knowledge/stats
+
+返回：
+
+{
+  "code": 0,
+  "data": {
+    "document_count": 3,
+    "chunk_count": 120,
+    "vector_store": "chroma",
+    "embedding_model": "BAAI/bge-small-zh-v1.5"
+  }
+}
+
+6. 普通 RAG 问答接口
+
+POST /api/chat
+
+请求：
+
+{
+  "query": "RAG 和普通大模型问答有什么区别？",
+  "top_k": 5,
+  "stream": false
+}
+
+返回：
+
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "answer": "RAG 会先检索外部知识库，再结合检索内容生成回答...",
+    "sources": [
+      {
+        "doc_id": "uuid",
+        "filename": "rag_intro.txt",
+        "chunk_id": "uuid_chunk_0",
+        "score": 0.82,
+        "text": "RAG 是 Retrieval-Augmented Generation..."
+      }
+    ]
+  }
+}
+
+要求：
+- 如果知识库为空，返回明确错误或提示；
+- 如果检索不到内容，回答“知识库中未找到相关信息”；
+- sources 至少包含 filename、score、text；
+- answer 不要编造来源；
+- mock 模式下可以返回基于 context 的简单模板回答。
+
+7. OpenAI-compatible 模型列表
+
+GET /v1/models
+
+返回：
+
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "rag-mcp-knowledge-platform",
+      "object": "model",
+      "created": 1710000000,
+      "owned_by": "local"
+    }
+  ]
+}
+
+8. OpenAI-compatible 聊天接口
+
+POST /v1/chat/completions
+
+请求示例：
+
+{
+  "model": "rag-mcp-knowledge-platform",
+  "messages": [
+    {"role": "user", "content": "什么是 RAG？"}
+  ],
+  "temperature": 0.7,
+  "stream": false
+}
+
+返回示例：
+
+{
+  "id": "chatcmpl-uuid",
+  "object": "chat.completion",
+  "created": 1710000000,
+  "model": "rag-mcp-knowledge-platform",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "RAG 是一种检索增强生成方法..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}
+
+要求：
+- 必须兼容 OpenWebUI 的基本调用；
+- 从 messages 中取最后一个 user 消息作为 query；
+- 内部调用 RAG chain；
+- stream 可以先不实现，若 stream=true 可以返回非流式结果，并在 README 说明。
+
+────────────────────────────────────────
+六、RAG 模块详细实现要求
+────────────────────────────────────────
+
+1. loader.py
+
+实现 DocumentLoader 类，支持：
+
+load_file(file_path: str) -> LoadedDocument
+
+LoadedDocument 包含：
+
+doc_id
+filename
+file_type
+content
+metadata
+
+不同文件类型处理：
+
+.pdf 使用 pypdf.PdfReader
+.docx 使用 python-docx
+.md 使用普通文本读取
+.txt 使用普通文本读取
+
+要求：
+- 统一使用 utf-8；
+- 处理空文档；
+- PDF 每页 metadata 中尽量保留 page；
+- 出错时抛出明确异常；
+- 不要让接口直接崩溃。
+
+2. splitter.py
+
+实现 TextSplitter 类。
+
+推荐使用 langchain_text_splitters.RecursiveCharacterTextSplitter。
+
+参数：
+chunk_size = 800
+chunk_overlap = 120
+
+输出 Chunk 列表：
+
+chunk_id
+doc_id
+text
+metadata
+
+chunk_id 格式：
+{doc_id}_chunk_{index}
+
+metadata 包含：
+doc_id
+filename
+file_type
+chunk_index
+
+要求：
+- 过滤过短文本；
+- chunk text 去除首尾空白；
+- 空文档返回空列表。
+
+3. embeddings.py
+
+实现 EmbeddingModel 类。
+
+默认模型：
+BAAI/bge-small-zh-v1.5
+
+要求：
+- 使用 sentence-transformers；
+- 提供 embed_documents(texts: list[str])；
+- 提供 embed_query(query: str)；
+- 对中文支持较好；
+- 如果模型下载失败，需要在 README 中说明可以换成 sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2；
+- 可以在 .env 中配置 EMBEDDING_MODEL_NAME。
+
+4. vector_store.py
+
+优先实现 ChromaVectorStore 类。
+
+功能：
+- add_chunks(chunks)
+- similarity_search(query, top_k)
+- persist()
+- count()
+
+使用 chromadb 持久化目录 data/vector_db/chroma。
+
+每个向量记录 metadata：
+doc_id
+filename
+file_type
+chunk_id
+chunk_index
+
+要求：
+- 重复构建同一文档时避免大量重复。简单做法：先按 doc_id 删除旧 chunks，再写入新 chunks；
+- 如果删除实现复杂，至少在 README 中说明当前版本重复构建会重复写入，并提供 clear 接口；
+- 推荐实现 clear() 方法，用于清空向量库。
+
+5. retriever.py
+
+实现 Retriever 类。
+
+retrieve(query: str, top_k: int) -> list[RetrievedChunk]
+
+返回：
+text
+score
+metadata
+
+Chroma 的距离可能不是相似度，需要做简单转换：
+score = 1 / (1 + distance)
+或者直接返回 distance，并在字段中说明。
+
+6. prompt.py
+
+定义 RAG Prompt 模板：
+
+你是一个专业的垂直领域知识库问答助手。
+请严格根据【知识库内容】回答用户问题。
+如果知识库内容不足以回答，请明确说明“知识库中未找到足够相关信息”，不要编造。
+回答应清晰、有条理，必要时使用分点说明。
+最后给出参考来源文件名。
+
+【知识库内容】
+{context}
+
+【用户问题】
+{question}
+
+请生成回答：
+
+7. chain.py
+
+实现 RAGChain 类。
+
+方法：
+
+answer(query: str, top_k: int = 5) -> ChatResult
+
+流程：
+- 调 retriever 检索 Top-K；
+- 组装 context；
+- 构造 prompt；
+- 调用 LLM；
+- 返回 answer 和 sources。
+
+要求：
+- 检索结果为空时，不调用 LLM，直接返回“知识库中未找到相关信息”；
+- sources 去重；
+- sources 中保留 chunk 原文，方便前端展示；
+- answer 中最好包含“参考来源”。
+
+────────────────────────────────────────
+七、LLM 模块要求
+────────────────────────────────────────
+
+实现统一接口：
+
+class BaseLLM:
+    def generate(self, prompt: str) -> str:
+        pass
+
+1. mock 模型
+
+用于没有 API key 和没有 Ollama 的环境。
+
+MockLLM 行为：
+- 根据 prompt 截取部分 context；
+- 返回一个明确的 mock 回答；
+- 方便测试接口。
+
+2. OllamaClient
+
+调用 Ollama API。
+
+默认地址：
+http://localhost:11434/api/generate
+
+请求：
+{
+  "model": "qwen2.5:7b",
+  "prompt": "...",
+  "stream": false
+}
+
+返回中读取 response 字段。
+
+要求：
+- 支持 OLLAMA_BASE_URL；
+- 支持 OLLAMA_MODEL；
+- 请求失败时返回明确错误；
+- README 中写明如何安装 Ollama 和拉取模型。
+
+示例命令：
+
+ollama pull qwen2.5:7b
+ollama serve
+
+3. APIClient
+
+兼容 OpenAI-like API 或 DeepSeek API。
+
+配置：
+API_MODEL_BASE_URL
+API_MODEL_API_KEY
+API_MODEL_NAME
+
+请求接口：
+POST {API_MODEL_BASE_URL}/chat/completions
+
+headers:
+Authorization: Bearer {API_MODEL_API_KEY}
+
+body:
+{
+  "model": "...",
+  "messages": [
+    {"role": "user", "content": prompt}
+  ],
+  "temperature": 0.7
+}
+
+要求：
+- API key 不要写死；
+- 从 .env 读取；
+- 错误处理清晰。
+
+────────────────────────────────────────
+八、SQLite 数据库要求
+────────────────────────────────────────
+
+使用 SQLite 记录文档和 chunk 元数据。
+
+数据库文件：
+data/sqlite/app.db
+
+可以使用 SQLAlchemy，也可以使用 sqlite3 简单实现。
+
+表 1：documents
+
+字段：
+id integer primary key autoincrement
+doc_id text unique
+filename text
+file_type text
+saved_path text
+created_at text
+
+表 2：chunks
+
+字段：
+id integer primary key autoincrement
+chunk_id text unique
+doc_id text
+filename text
+chunk_index integer
+text text
+created_at text
+
+表 3：notes
+
+用于 MCP 示例工具。
+
+字段：
+id integer primary key autoincrement
+title text
+content text
+tags text
+created_at text
+
+scripts/init_db.py：
+- 创建表；
+- 插入几条 notes 示例数据。
+
+scripts/build_sample_kb.py：
+- 使用 data/samples 中的示例文档构建知识库。
+
+────────────────────────────────────────
+九、MCP Server 要求
+────────────────────────────────────────
+
+在 mcp_server/server.py 中实现一个 MCP Server。
+
+如果 mcp Python SDK 可用，使用官方 SDK 写法。
+如果环境不方便，可以实现一个简化版 HTTP 工具服务，并在 README 中说明这是 MCP-like demo。但优先使用 mcp SDK。
+
+需要提供三个工具：
+
+1. get_kb_stats
+
+功能：
+读取 SQLite 和向量库统计信息。
+
+返回：
+{
+  "document_count": 3,
+  "chunk_count": 120,
+  "vector_store": "chroma"
+}
+
+2. read_project_file
+
+参数：
+path: str
+
+功能：
+读取项目内 docs 或 README 文件。
+
+限制：
+- 不允许读取项目目录外的文件；
+- 防止路径穿越，如 ../../；
+- 只允许读取 .md .txt .json 文件。
+
+3. query_notes
+
+参数：
+keyword: str
+
+功能：
+从 SQLite notes 表中查询标题或内容包含 keyword 的笔记。
+
+返回：
+[
+  {
+    "title": "RAG 学习笔记",
+    "content": "...",
+    "tags": "rag,llm"
+  }
+]
+
+mcp_server/README.md 要说明：
+- 如何启动 MCP Server；
+- 有哪些工具；
+- 如何测试工具。
+
+────────────────────────────────────────
+十、OpenWebUI 接入要求
+────────────────────────────────────────
+
+项目需要通过 OpenAI-compatible API 接入 OpenWebUI。
+
+docker-compose.yml 中 open-webui 服务：
+
+open-webui:
+  image: ghcr.io/open-webui/open-webui:main
+  container_name: open-webui
+  ports:
+    - "3000:8080"
+  volumes:
+    - open-webui:/app/backend/data
+  environment:
+    - OPENAI_API_BASE_URL=http://backend:8000/v1
+    - OPENAI_API_KEY=dummy-key
+  depends_on:
+    - backend
+
+后端提供：
+GET /v1/models
+POST /v1/chat/completions
+
+README 中写明：
+1. 启动 docker compose；
+2. 打开 http://localhost:3000；
+3. 注册本地账号；
+4. 设置 OpenAI API 地址为 http://backend:8000/v1 或 http://localhost:8000/v1；
+5. 模型选择 rag-mcp-knowledge-platform；
+6. 提问测试。
+
+────────────────────────────────────────
+十一、Docker 要求
+────────────────────────────────────────
+
+1. backend/Dockerfile
+
+要求：
+- Python 3.10 或 3.11 slim；
+- 安装 requirements；
+- 工作目录 /app；
+- 复制 backend 代码；
+- 暴露 8000；
+- 启动 uvicorn。
+
+示例：
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+注意：
+由于需要访问项目根目录 data，可以在 docker-compose 中挂载 ./data:/data，并通过环境变量 DATA_DIR=/data 配置。
+
+2. docker-compose.yml
+
+至少包含：
+
+services:
+  backend
+  open-webui
+  ollama
+
+backend:
+- build ./backend
+- ports 8000:8000
+- volumes ./data:/data
+- env_file .env
+
+open-webui:
+- image ghcr.io/open-webui/open-webui:main
+- ports 3000:8080
+- depends_on backend
+
+ollama:
+- image ollama/ollama
+- ports 11434:11434
+- volumes ollama:/root/.ollama
+
+3. .env.example
+
+包含：
+
+APP_ENV=dev
+DATA_DIR=/data
+RAW_DOCS_DIR=/data/raw_docs
+VECTOR_DB_DIR=/data/vector_db
+SQLITE_DB_PATH=/data/sqlite/app.db
+
+VECTOR_STORE_TYPE=chroma
+EMBEDDING_MODEL_NAME=BAAI/bge-small-zh-v1.5
+CHUNK_SIZE=800
+CHUNK_OVERLAP=120
+TOP_K=5
+
+LLM_PROVIDER=mock
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=qwen2.5:7b
+
+API_MODEL_BASE_URL=
+API_MODEL_API_KEY=
+API_MODEL_NAME=deepseek-chat
+
+注意：
+默认 LLM_PROVIDER=mock，保证项目初次启动不依赖外部模型。
+README 中说明可以改成 ollama 或 api。
+
+────────────────────────────────────────
+十二、样例数据要求
+────────────────────────────────────────
+
+data/samples/ 下创建 3 个示例文档：
+
+1. rag_intro.txt
+内容包括：
+- 什么是 RAG；
+- RAG 与普通 LLM 问答区别；
+- RAG 的基本流程；
+- 向量数据库作用。
+
+2. ai_interview_notes.md
+内容包括：
+- AI 实习生岗位常见技术栈；
+- LangChain、OpenWebUI、MCP、Ollama 的作用；
+- 面试常见问题。
+
+3. software_engineering_notes.md
+内容包括：
+- 软件工程项目分层；
+- API 设计；
+- Docker 部署；
+- 日志和异常处理。
+
+这些示例文档用于用户快速构建知识库并测试问答。
+
+────────────────────────────────────────
+十三、README 要求
+────────────────────────────────────────
+
+README.md 必须详细，适合 GitHub 展示和面试官查看。
+
+结构如下：
+
+# 基于 RAG 与 MCP 的垂直领域智能知识库问答平台
+
+## 1. 项目简介
+说明这是一个基于 FastAPI、LangChain、Chroma、OpenWebUI、MCP 的知识库问答平台。
+
+## 2. 项目功能
+- 多类型文档上传
+- 文档解析
+- 文本切分
+- 向量化
+- Top-K 检索
+- RAG 问答
+- 引用来源返回
+- OpenAI-compatible API
+- OpenWebUI 接入
+- MCP 工具调用
+- Docker Compose 部署
+
+## 3. 系统架构
+
+用文本图展示：
+
+用户
+ ↓
+OpenWebUI / API Client
+ ↓
+FastAPI Backend
+ ↓
+RAG Pipeline
+ ├─ Document Loader
+ ├─ Text Splitter
+ ├─ Embedding Model
+ ├─ Chroma Vector DB
+ ├─ Retriever
+ └─ LLM Generator
+ ↓
+Answer + Sources
+
+MCP Server
+ ├─ Knowledge Base Stats
+ ├─ File Reader
+ └─ SQLite Notes Query
+
+## 4. 技术栈
+
+列出 Python、FastAPI、LangChain、Chroma、Hugging Face、OpenWebUI、MCP、Ollama、Docker、SQLite。
+
+## 5. 快速启动
+
+本地启动：
+
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+Docker 启动：
+
+cp .env.example .env
+docker compose up -d
+
+## 6. 构建示例知识库
+
+python scripts/init_db.py
+python scripts/build_sample_kb.py
+
+或者通过接口上传文档和构建。
+
+## 7. API 使用示例
+
+curl 示例：
+
+curl http://localhost:8000/health
+
+上传文档：
+
+curl -X POST "http://localhost:8000/api/documents/upload" \
+  -F "file=@data/samples/rag_intro.txt"
+
+构建知识库：
+
+curl -X POST "http://localhost:8000/api/knowledge/build" \
+  -H "Content-Type: application/json" \
+  -d '{"doc_ids": []}'
+
+问答：
+
+curl -X POST "http://localhost:8000/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "RAG 和普通大模型问答有什么区别？", "top_k": 5}'
+
+OpenAI-compatible：
+
+curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "rag-mcp-knowledge-platform", "messages": [{"role": "user", "content": "什么是 RAG？"}]}'
+
+## 8. OpenWebUI 接入方法
+
+说明如何打开 http://localhost:3000 并配置。
+
+## 9. MCP Server 使用方法
+
+说明如何启动 mcp_server/server.py 和工具列表。
+
+## 10. 项目亮点
+
+面向简历描述：
+
+- 基于 LangChain 构建完整 RAG 流程；
+- 使用 Hugging Face embedding 和 Chroma 向量库；
+- 封装 OpenAI-compatible API 接入 OpenWebUI；
+- 基于 MCP Server 扩展工具调用；
+- 使用 Docker Compose 实现一键部署；
+- 支持 mock、Ollama、API 三种模型调用方式。
+
+## 11. 后续优化方向
+
+- 增加 reranker；
+- 增加用户权限；
+- 增加流式输出；
+- 增加多轮对话记忆；
+- 增加 vLLM 推理服务；
+- 增加知识库增量更新；
+- 增加评估指标。
+
+────────────────────────────────────────
+十四、docs 文档要求
+────────────────────────────────────────
+
+1. docs/项目说明.md
+
+内容：
+- 项目背景
+- 项目目标
+- 系统模块
+- 核心流程
+- 适合写入简历的原因
+
+2. docs/接口文档.md
+
+详细列出所有 API：
+- 请求路径
+- 请求方法
+- 参数
+- 返回值
+- curl 示例
+
+3. docs/测试案例.md
+
+至少包含 5 个测试案例：
+
+测试 1：健康检查
+测试 2：上传 TXT 文档
+测试 3：构建知识库
+测试 4：RAG 问答
+测试 5：OpenAI-compatible 接口
+测试 6：MCP 工具查询知识库统计
+
+4. docs/简历描述.md
+
+写好可直接复制到简历的项目内容：
+
+项目名称：
+基于 RAG 与 MCP 的垂直领域智能知识库问答平台
+
+项目描述：
+基于 Python、FastAPI、LangChain 和 OpenWebUI 设计并实现垂直领域知识库问答平台，支持 PDF、Word、Markdown、TXT 等多类型文档上传、解析、分块、向量化检索和大模型生成回答。系统通过 Hugging Face embedding 模型构建本地向量知识库，结合 Top-K 检索和 Prompt 增强实现 RAG 问答，并封装 OpenAI-compatible API 接入 OpenWebUI。同时基于 MCP Server 扩展本地文件读取、知识库统计和 SQLite 查询等工具调用能力，支持 Docker Compose 一键部署。
+
+技术栈：
+Python、FastAPI、LangChain、OpenWebUI、Hugging Face、Chroma、RAG、MCP、Ollama、Docker、SQLite
+
+项目亮点：
+- 基于 LangChain 构建 RAG 流程，实现文档解析、文本分块、向量化存储、Top-K 检索和上下文增强生成；
+- 使用 Hugging Face embedding 模型和 Chroma 构建本地向量数据库，提高垂直领域知识检索能力；
+- 封装 OpenAI-compatible API，使 OpenWebUI 能够作为前端界面调用自研知识库问答服务；
+- 设计 MCP Server 工具调用模块，支持知识库统计、本地文件读取和 SQLite 查询；
+- 使用 Docker Compose 编排后端服务、OpenWebUI 和本地模型服务，完成项目一键部署；
+- 支持 mock、Ollama 和 API 三种模型调用方式，提高部署灵活性。
+
+5. docs/面试讲解稿.md
+
+写一段 2 分钟项目讲解稿，内容包括：
+- 为什么做这个项目；
+- RAG 流程；
+- OpenWebUI 如何接入；
+- MCP 做了什么；
+- Docker 如何部署；
+- 项目难点和解决方案。
+
+────────────────────────────────────────
+十五、测试要求
+────────────────────────────────────────
+
+至少实现以下测试或脚本：
+
+1. scripts/init_db.py
+创建 SQLite 表，插入 notes 示例数据。
+
+2. scripts/build_sample_kb.py
+把 data/samples 中的示例文档写入文档表，并构建向量库。
+
+3. scripts/test_api.py
+自动请求：
+- /health
+- /api/knowledge/stats
+- /api/chat
+
+4. tests/test_loader.py
+测试 txt/md/docx/pdf 中至少 txt 和 md 的解析。
+
+5. tests/test_splitter.py
+测试文本切分不为空，chunk_id 正确。
+
+6. tests/test_chat_api.py
+可用 TestClient 测试 /health 和 /api/chat 基本返回。
+
+────────────────────────────────────────
+十六、异常处理要求
+────────────────────────────────────────
+
+必须处理以下情况：
+
+1. 上传不支持的文件类型；
+2. 上传空文件；
+3. 文档解析失败；
+4. 知识库为空；
+5. embedding 模型加载失败；
+6. LLM 调用失败；
+7. Ollama 未启动；
+8. SQLite 文件不存在；
+9. 向量库目录不存在；
+10. OpenAI-compatible 请求 messages 为空；
+11. 用户问题为空；
+12. MCP 文件读取路径越界。
+
+API 错误返回格式统一：
+
+{
+  "code": 400,
+  "message": "error message",
+  "data": null
+}
+
+或使用 FastAPI HTTPException，但 response body 要尽量清晰。
+
+────────────────────────────────────────
+十七、日志要求
+────────────────────────────────────────
+
+实现 utils/logger.py。
+
+日志至少记录：
+- 服务启动；
+- 文件上传；
+- 文档解析；
+- chunk 数量；
+- 向量库构建；
+- 用户提问；
+- 检索结果数量；
+- LLM 调用耗时；
+- 错误信息。
+
+可以使用 Python logging。
+
+────────────────────────────────────────
+十八、代码质量要求
+────────────────────────────────────────
+
+1. 代码清晰，不要所有逻辑写在 main.py；
+2. 每个模块职责单一；
+3. 类和函数命名清晰；
+4. 尽量添加类型注解；
+5. 避免硬编码路径；
+6. 所有配置从 config.py 或 .env 读取；
+7. 所有接口有 Pydantic schema；
+8. 不要把 API key 写进代码；
+9. README 中说明运行前置条件；
+10. 保证默认 mock 模式下可以启动并测试。
+
+────────────────────────────────────────
+十九、验收标准
+────────────────────────────────────────
+
+项目完成后，应满足以下验收标准：
+
+1. 执行 docker compose up -d 后，backend 可以访问：
+http://localhost:8000/health
+
+2. OpenWebUI 可以访问：
+http://localhost:3000
+
+3. 执行 scripts/init_db.py 后生成 SQLite 数据库。
+
+4. 上传 data/samples/rag_intro.txt 成功。
+
+5. 调用 /api/knowledge/build 成功，返回 chunk_count > 0。
+
+6. 调用 /api/chat 问“RAG 和普通大模型问答有什么区别？”可以返回合理回答和 sources。
+
+7. 调用 /v1/models 可以返回 rag-mcp-knowledge-platform。
+
+8. 调用 /v1/chat/completions 可以返回 OpenAI 风格响应。
+
+9. MCP Server 至少可以提供 get_kb_stats、read_project_file、query_notes 三个工具。
+
+10. README 中有完整启动和测试说明。
+
+11. docs/简历描述.md 中有可直接复制到简历的项目描述。
+
+12. docs/面试讲解稿.md 中有可用于面试讲解的内容。
+
+────────────────────────────────────────
+二十、推荐开发顺序
+────────────────────────────────────────
+
+请 Codex 按以下顺序实现，不要一次性写乱：
+
+第 1 步：生成项目目录结构和基础文件
+第 2 步：实现 config.py、logger.py、response.py
+第 3 步：实现 SQLite 初始化和 models
+第 4 步：实现 health API
+第 5 步：实现文档上传和文档列表 API
+第 6 步：实现 loader.py
+第 7 步：实现 splitter.py
+第 8 步：实现 embeddings.py
+第 9 步：实现 vector_store.py
+第 10 步：实现 retriever.py
+第 11 步：实现 llm/base.py、mock、ollama、api client
+第 12 步：实现 prompt.py 和 chain.py
+第 13 步：实现 /api/chat
+第 14 步：实现 /api/knowledge/build 和 /api/knowledge/stats
+第 15 步：实现 /v1/models 和 /v1/chat/completions
+第 16 步：实现 mcp_server
+第 17 步：实现 scripts
+第 18 步：实现 Dockerfile 和 docker-compose.yml
+第 19 步：补充 README 和 docs
+第 20 步：运行测试并修复错误
+
+────────────────────────────────────────
+二十一、最小可运行优先级
+────────────────────────────────────────
+
+如果时间有限，请优先保证以下功能先跑通：
+
+1. FastAPI 启动
+2. TXT / MD 上传
+3. 文本切分
+4. Chroma 向量库
+5. mock LLM
+6. /api/chat
+7. /v1/chat/completions
+8. Docker Compose
+9. README
+
+PDF、DOCX、Ollama、MCP 可以后补，但最终项目必须包含。
+
+────────────────────────────────────────
+二十二、面试重点说明
+────────────────────────────────────────
+
+项目中最值得强调的点：
+
+1. 不是简单调用大模型 API，而是实现了完整 RAG 流程；
+2. 支持私有文档知识库，适合垂直领域问答；
+3. 用 embedding 和向量库做相似度检索；
+4. 用 Prompt 把检索结果交给大模型生成回答；
+5. 返回 sources，降低幻觉，提高可解释性；
+6. 接入 OpenWebUI，具备真实可交互界面；
+7. 封装 OpenAI-compatible API，说明理解大模型服务接口；
+8. 实现 MCP Server，说明理解工具调用和外部系统连接；
+9. 用 Docker Compose 部署，具备工程化能力；
+10. 支持 Ollama 本地模型，说明有模型部署意识。
+
+────────────────────────────────────────
+二十三、GitHub 展示要求
+────────────────────────────────────────
+
+请保证项目上传 GitHub 后看起来完整：
+
+1. README 首页清晰；
+2. 有项目架构图，至少文本图；
+3. 有启动命令；
+4. 有接口示例；
+5. 有截图占位说明，可以在 docs 中写 screenshots 目录；
+6. 有简历描述；
+7. 有面试讲解稿；
+8. .env.example 完整；
+9. .gitignore 排除：
+   - .env
+   - __pycache__
+   - .pytest_cache
+   - data/vector_db
+   - data/sqlite/*.db
+   - uploads
+   - .DS_Store
+10. 不要上传 API key。
+
+────────────────────────────────────────
+二十四、需要生成的最终文件清单
+────────────────────────────────────────
+
+请最终生成以下文件：
+
+根目录：
+- README.md
+- docker-compose.yml
+- .env.example
+- .gitignore
+- LICENSE
+
+backend：
+- backend/requirements.txt
+- backend/Dockerfile
+- backend/run.sh
+- backend/app/main.py
+- backend/app/config.py
+- backend/app/api/health.py
+- backend/app/api/chat.py
+- backend/app/api/documents.py
+- backend/app/api/knowledge.py
+- backend/app/api/openai_compatible.py
+- backend/app/rag/loader.py
+- backend/app/rag/splitter.py
+- backend/app/rag/embeddings.py
+- backend/app/rag/vector_store.py
+- backend/app/rag/retriever.py
+- backend/app/rag/prompt.py
+- backend/app/rag/chain.py
+- backend/app/llm/base.py
+- backend/app/llm/ollama_client.py
+- backend/app/llm/api_client.py
+- backend/app/database/db.py
+- backend/app/database/models.py
+- backend/app/schemas/chat.py
+- backend/app/schemas/document.py
+- backend/app/schemas/openai.py
+- backend/app/utils/logger.py
+- backend/app/utils/file_utils.py
+- backend/app/utils/response.py
+
+mcp_server：
+- mcp_server/server.py
+- mcp_server/requirements.txt
+- mcp_server/tools/file_tools.py
+- mcp_server/tools/kb_tools.py
+- mcp_server/tools/db_tools.py
+- mcp_server/README.md
+
+data/samples：
+- rag_intro.txt
+- ai_interview_notes.md
+- software_engineering_notes.md
+
+scripts：
+- init_db.py
+- build_sample_kb.py
+- test_api.py
+
+docs：
+- 项目说明.md
+- 接口文档.md
+- 测试案例.md
+- 简历描述.md
+- 面试讲解稿.md
+
+tests：
+- test_loader.py
+- test_splitter.py
+- test_chat_api.py
+
+────────────────────────────────────────
+二十五、最终提示
+────────────────────────────────────────
+
+请 Codex 在实现时注意：
+
+1. 默认配置必须能跑通，不要依赖用户必须有 GPU；
+2. 默认 LLM_PROVIDER=mock，确保无 API key、无 Ollama 也能测试；
+3. embedding 模型第一次下载可能较慢，README 要说明；
+4. 如果 Chroma 安装或运行有问题，可以保留 SimpleInMemoryVectorStore 作为降级方案，但主实现仍然推荐 Chroma；
+5. 代码不要过度复杂，重点是完整、可运行、可讲解；
+6. 所有路径要兼容 Windows、Linux、WSL；
+7. 项目应适合软件工程研究生简历展示；
+8. 输出结果要包括完整代码和文档；
+9. 不要只生成伪代码；
+10. 每完成一个模块后尽量保证项目仍可运行。
+
+请根据以上说明直接生成完整项目代码。

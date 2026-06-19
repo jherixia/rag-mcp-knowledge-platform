@@ -1,0 +1,19 @@
+人工智能实习生岗位要求
+
+岗位职责：
+1. 参与企业内部知识库问答系统、RAG 应用和智能体工具链的开发。
+2. 协助完成文档解析、文本切分、向量检索、Prompt 设计和大模型问答效果评估。
+3. 配合接入 OpenWebUI、LangChain、MCP Server 等工具，搭建可演示的 AI 应用原型。
+4. 调研并实践 vLLM、llama.cpp、Ollama 等本地推理或模型部署方案。
+5. 使用 Hugging Face Transformers、Embedding 模型和开源 LLM 完成基础实验。
+
+技术要求：
+1. 熟悉 Python、FastAPI、HTTP API、JSON、SQLite 等基础工程能力。
+2. 理解 Transformer、大语言模型、Embedding、向量数据库和 RAG 的基本原理。
+3. 了解 LangChain 中 Retriever、Prompt、LLM Chain、Document Loader 的作用。
+4. 了解 OpenAI-compatible API，能够让 OpenWebUI 连接自研后端。
+5. 了解 MCP 的基本概念，知道 MCP Server 可以把文件系统、数据库、搜索等外部工具暴露给模型或智能体。
+6. 加分项：使用过 vLLM、llama.cpp、Hugging Face、Ollama、Docker Compose 或 GPU 推理部署。
+
+学习建议：
+如果从零开始，可以先掌握 Python Web API 和 RAG 基础流程，再学习 LangChain 和 OpenWebUI 接入，最后再尝试 Ollama、vLLM、llama.cpp 等真实模型部署方案。
