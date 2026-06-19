@@ -1,12 +1,12 @@
 # 基于 RAG 与 MCP 的垂直领域智能知识库问答平台
 
-本项目是一个面向私有文档知识库的智能问答平台，围绕文档上传、文档解析、文本切分、向量化检索、RAG 问答、OpenWebUI 接入和 MCP 工具调用构建完整应用闭环。系统支持 mock、OpenAI-compatible API 和 Ollama 三种模型调用模式，并接入 Hugging Face Embedding 与 Chroma 向量数据库，实现可追溯的知识库问答能力。
+本项目是一个面向私有文档知识库的智能问答平台，围绕文档上传、文档解析、文本切分、向量化检索、RAG 问答、OpenWebUI 接入和 MCP-like 工具调用构建完整应用闭环。系统支持 mock、OpenAI-compatible API 和 Ollama 三种模型调用模式，并接入 Hugging Face Embedding 与 Chroma 向量数据库，实现可追溯的知识库问答能力。
 
 ## 项目定位
 
 项目目标是构建一个可用于垂直领域资料问答的轻量级 RAG 平台。用户可以将岗位要求、技术笔记、项目文档等资料导入知识库，系统将文档切分为 chunk，生成向量并存入本地向量数据库。提问时，系统先检索相关知识片段，再将片段作为上下文交给大模型或 mock 生成器生成回答，并返回引用来源。
 
-项目同时封装了 OpenAI-compatible API，使 OpenWebUI 可以作为统一前端入口调用本项目的 RAG 服务；另外提供 MCP 工具服务，将知识库统计、文件读取、SQLite 笔记查询和知识库检索能力暴露为工具接口。
+项目同时封装了 OpenAI-compatible API，使 OpenWebUI 可以作为统一前端入口调用本项目的 RAG 服务；另外基于 MCP 工具调用思想实现 HTTP-based MCP-like 工具服务，将知识库统计、文件读取、SQLite 笔记查询和知识库检索能力暴露为工具接口。
 
 ## 核心能力
 
@@ -16,8 +16,8 @@
 - 模型调用模式：支持 mock、OpenAI-compatible API、Ollama 本地模型三种模式。
 - OpenWebUI 接入：通过 `/v1/models` 和 `/v1/chat/completions` 兼容 OpenAI Chat Completions 接口。
 - 知识库管理：支持构建知识库、清空知识库、删除文档、重建指定文档。
-- MCP 工具调用：支持知识库统计、项目文件读取、SQLite notes 查询和知识库检索。
-- Docker 编排：包含 backend、OpenWebUI、Ollama、MCP Server 等服务定义。
+- MCP-like 工具调用：支持知识库统计、项目文件读取、SQLite notes 查询和知识库检索。
+- Docker 编排：包含 backend、OpenWebUI、Ollama、MCP-like 工具服务等服务定义。
 
 ## 技术架构
 
@@ -48,7 +48,7 @@ FastAPI Backend
       |     +-- /v1/models
       |     +-- /v1/chat/completions
       |
-      +-- MCP Server
+      +-- MCP-like Tool Server
             +-- get_kb_stats
             +-- read_project_file
             +-- query_notes
@@ -81,9 +81,9 @@ RAG 链路将用户问题转换为 query embedding，在向量库中进行 Top-K
 
 项目提供 OpenAI-compatible API，使 OpenWebUI 可以直接识别模型 `rag-mcp-knowledge-platform`。OpenWebUI 发出的聊天请求会进入项目内部 RAG 流程，而不是直接调用通用大模型。
 
-### MCP 工具服务
+### MCP-like 工具服务
 
-MCP 工具服务位于 `mcp_server/`，提供面向智能体工具调用的能力：
+MCP-like 工具服务位于 `mcp_server/`，当前实现为 HTTP-based fallback 服务，提供面向智能体工具调用的能力，后续可迁移到官方 MCP SDK：
 
 - `get_kb_stats`：查询知识库文档数量、chunk 数量、向量库类型和 embedding 模型。
 - `read_project_file`：安全读取项目内 Markdown、TXT、JSON 文件。
@@ -102,7 +102,7 @@ backend/
     rag/          文档解析、切分、embedding、向量库、RAG Chain
 
 mcp_server/
-  server.py       MCP HTTP fallback 服务
+  server.py       HTTP-based MCP-like 工具服务
   tools.py        MCP 工具函数
 
 scripts/
@@ -168,7 +168,7 @@ resultfig/
 - RAG 检索结果返回结构化 sources，便于定位答案来源。
 - OpenWebUI 接入层与内部 RAG 逻辑解耦，前端请求不会绕过知识库检索。
 - Embedding、向量库和 LLM 调用均做了配置化抽象，方便替换模型和存储后端。
-- MCP 工具复用已有知识库检索能力，避免重复实现检索逻辑。
+- MCP-like 工具复用已有知识库检索能力，避免重复实现检索逻辑。
 - 默认保留本地可运行能力，同时支持 Docker Compose 服务编排。
 
 ## 当前边界
@@ -176,4 +176,4 @@ resultfig/
 - Chroma 更适合本地演示和中小规模知识库，大规模生产场景需要引入权限、索引治理和分布式向量数据库。
 - mock 模式用于验证流程，不代表真实大模型推理质量。
 - Ollama 和 API 模式的回答质量取决于所选模型能力、上下文长度和提示词设计。
-- MCP 当前提供 HTTP fallback 工具服务，后续可进一步增强为完整官方 MCP SDK 形态。
+- MCP-like 当前提供 HTTP-based fallback 工具服务，后续可迁移到官方 MCP SDK。
