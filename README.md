@@ -1,315 +1,179 @@
 # 基于 RAG 与 MCP 的垂直领域智能知识库问答平台
 
-这是一个 mock-first 的 RAG 知识库问答项目。默认 `LLM_PROVIDER=mock`，没有 API Key、没有 Ollama、没有 GPU 也能跑通文档上传、知识库构建、RAG 问答和 OpenWebUI 接入。第二阶段已支持真实 OpenAI-compatible API 模式和 Ollama 本地模型模式。
+本项目是一个面向私有文档知识库的智能问答平台，围绕文档上传、文档解析、文本切分、向量化检索、RAG 问答、OpenWebUI 接入和 MCP 工具调用构建完整应用闭环。系统支持 mock、OpenAI-compatible API 和 Ollama 三种模型调用模式，并接入 Hugging Face Embedding 与 Chroma 向量数据库，实现可追溯的知识库问答能力。
 
-## 项目概览
+## 项目定位
 
-本项目实现一个可本地运行的垂直领域 RAG 知识库问答平台，支持文档上传、知识库构建、向量检索、RAG 问答、OpenWebUI 接入和 MCP 工具调用。默认使用 mock 模式，保证没有 API Key、没有 Ollama、没有 GPU 的环境也能跑通完整流程；也可以切换到 OpenAI-compatible API 或 Ollama 本地模型。
+项目目标是构建一个可用于垂直领域资料问答的轻量级 RAG 平台。用户可以将岗位要求、技术笔记、项目文档等资料导入知识库，系统将文档切分为 chunk，生成向量并存入本地向量数据库。提问时，系统先检索相关知识片段，再将片段作为上下文交给大模型或 mock 生成器生成回答，并返回引用来源。
 
-- 单元测试：`10 passed`
-- 默认运行模式：mock
-- 检索后端：sentence-transformers + Chroma，支持 lightweight/local 兜底
-- 前端接入：OpenWebUI / OpenAI-compatible API
-- 工具服务：MCP HTTP fallback Server
-- 部署方式：本地命令或 Docker Compose
+项目同时封装了 OpenAI-compatible API，使 OpenWebUI 可以作为统一前端入口调用本项目的 RAG 服务；另外提供 MCP 工具服务，将知识库统计、文件读取、SQLite 笔记查询和知识库检索能力暴露为工具接口。
 
-相关文档：
+## 核心能力
 
-- [接口文档](docs/接口文档.md)
-- [MCP Server 文档](mcp_server/README.md)
+- 多类型文档知识库：支持 TXT、Markdown、PDF、Word 等文档接入。
+- RAG 问答流程：覆盖文档解析、文本切分、向量化、Top-K 检索、Prompt 组装和答案生成。
+- 真实向量检索：支持 Hugging Face `sentence-transformers` embedding 和 Chroma 本地持久化向量数据库。
+- 模型调用模式：支持 mock、OpenAI-compatible API、Ollama 本地模型三种模式。
+- OpenWebUI 接入：通过 `/v1/models` 和 `/v1/chat/completions` 兼容 OpenAI Chat Completions 接口。
+- 知识库管理：支持构建知识库、清空知识库、删除文档、重建指定文档。
+- MCP 工具调用：支持知识库统计、项目文件读取、SQLite notes 查询和知识库检索。
+- Docker 编排：包含 backend、OpenWebUI、Ollama、MCP Server 等服务定义。
 
-## 第一阶段：mock 模式启动
-
-安装依赖：
-
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-启动后端：
-
-```bash
-PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-如果当前机器没有 `pip`，但项目目录里已有 `.pyuser` 依赖，可以使用：
-
-```bash
-PYTHONPATH=/home/jp/code/agent/.pyuser/lib/python3.12/site-packages:backend \
-/home/jp/code/agent/.pyuser/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-访问：
-
-- 健康检查：http://localhost:8000/health
-- API 文档：http://localhost:8000/docs
-- 模型列表：http://localhost:8000/v1/models
-
-构建示例知识库：
-
-```bash
-PYTHONPATH=backend python3 scripts/build_sample_kb.py
-```
-
-## 第二阶段：API 模式启动
-
-复制 `.env.example` 为 `.env`，并修改：
-
-```env
-LLM_PROVIDER=api
-API_MODEL_BASE_URL=https://api.deepseek.com/v1
-API_MODEL_API_KEY=your_api_key_here
-API_MODEL_NAME=deepseek-chat
-```
-
-然后启动：
-
-```bash
-PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-API 模式使用 OpenAI Chat Completions 格式，兼容 DeepSeek、OpenAI-compatible、通义千问兼容接口等。API Key 只从环境变量或 `.env` 读取，不写死在代码里。
-
-## Ollama 模式启动
-
-先安装并运行 Ollama：
-
-```bash
-ollama pull qwen2.5:7b
-ollama serve
-```
-
-本机直接访问 Ollama 时，`.env` 使用：
-
-```env
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
-```
-
-如果 backend 在 docker-compose 内部访问 Ollama，使用：
-
-```env
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:7b
-```
-
-Ollama 未启动或模型不存在时，接口会返回清晰的模型调用失败信息。
-
-## OpenWebUI 接入方法
-
-OpenWebUI 里添加 OpenAI-compatible 连接：
-
-- API Key: `mock-key`
-- Model: `rag-mcp-knowledge-platform`
-
-Base URL 按部署方式选择：
-
-1. 后端和 OpenWebUI 都在 docker-compose 中：
+## 技术架构
 
 ```text
-http://backend:8000/v1
+用户 / OpenWebUI
+      |
+      v
+FastAPI Backend
+      |
+      +-- Document API
+      |     +-- 文档上传
+      |     +-- 文档列表
+      |     +-- 文档删除
+      |
+      +-- Knowledge API
+      |     +-- 文档解析
+      |     +-- 文本切分
+      |     +-- Embedding 向量化
+      |     +-- Chroma 向量存储
+      |
+      +-- Chat API
+      |     +-- Top-K 检索
+      |     +-- Prompt 组装
+      |     +-- LLM / Mock / Ollama 生成
+      |     +-- sources 引用返回
+      |
+      +-- OpenAI-compatible API
+      |     +-- /v1/models
+      |     +-- /v1/chat/completions
+      |
+      +-- MCP Server
+            +-- get_kb_stats
+            +-- read_project_file
+            +-- query_notes
+            +-- search_kb
 ```
 
-2. 后端在本机启动，OpenWebUI 在 Docker 中：
+## 模块说明
+
+### FastAPI 后端
+
+后端负责提供项目主要接口，包括文档上传、知识库构建、知识库统计、RAG 问答、OpenAI-compatible 兼容接口等。接口返回中保留 `answer` 和 `sources`，方便用户查看答案依据。
+
+### RAG 检索链路
+
+RAG 链路将用户问题转换为 query embedding，在向量库中进行 Top-K 相似度检索，得到相关 chunk 后拼接为上下文，再交给模型生成回答。返回的 sources 包含 `doc_id`、`filename`、`chunk_id`、`chunk_index`、`score` 和文本片段，提升回答可追溯性。
+
+### Embedding 与 Chroma
+
+项目支持 `sentence-transformers` 真实 embedding 路径，默认可使用中文友好的 BGE 系列模型，也支持多语言 MiniLM 模型作为替代。向量数据通过 Chroma 持久化到本地目录，适合本地开发和小型知识库场景。
+
+### LLM 调用层
+
+模型调用层抽象为统一客户端，当前包含三种模式：
+
+- `mock`：无外部依赖，用于验证完整 RAG 流程。
+- `api`：调用 OpenAI-compatible Chat Completions 接口。
+- `ollama`：调用本地 Ollama `/api/generate` 接口。
+
+### OpenWebUI 接入
+
+项目提供 OpenAI-compatible API，使 OpenWebUI 可以直接识别模型 `rag-mcp-knowledge-platform`。OpenWebUI 发出的聊天请求会进入项目内部 RAG 流程，而不是直接调用通用大模型。
+
+### MCP 工具服务
+
+MCP 工具服务位于 `mcp_server/`，提供面向智能体工具调用的能力：
+
+- `get_kb_stats`：查询知识库文档数量、chunk 数量、向量库类型和 embedding 模型。
+- `read_project_file`：安全读取项目内 Markdown、TXT、JSON 文件。
+- `query_notes`：按关键词查询 SQLite notes 表。
+- `search_kb`：复用现有向量检索能力查询知识库。
+
+## 项目结构
 
 ```text
-http://host.docker.internal:8000/v1
+backend/
+  app/
+    api/          FastAPI 路由
+    core/         配置管理
+    db/           SQLite 数据访问
+    llm/          mock / api / ollama 模型客户端
+    rag/          文档解析、切分、embedding、向量库、RAG Chain
+
+mcp_server/
+  server.py       MCP HTTP fallback 服务
+  tools.py        MCP 工具函数
+
+scripts/
+  build_sample_kb.py
+  init_db.py
+  test_api.py
+  test_mcp_tools.py
+
+tests/
+  RAG、Embedding、向量库、知识库 API、MCP 工具测试
+
+data/
+  samples/        示例文档
+  raw_docs/       上传文档目录占位
+
+resultfig/
+  项目运行结果截图
 ```
 
-3. 后端和 OpenWebUI 都本机启动：
+## 结果截图
 
-```text
-http://localhost:8000/v1
-```
+### 项目接口与基础能力
 
-Docker Compose 启动：
+![项目结果截图 1](resultfig/微信图片_20260618213423_376_49.png)
 
-```bash
-docker compose up --build
-```
+![项目结果截图 2](resultfig/微信图片_20260618213528_377_49.png)
 
-服务端口：
+![项目结果截图 3](resultfig/微信图片_20260618213607_378_49.png)
 
-- backend: http://localhost:8000
-- OpenWebUI: http://localhost:3000
-- Ollama: http://localhost:11434
+![项目结果截图 4](resultfig/微信图片_20260618213659_379_49.png)
 
-## curl 测试命令
+### RAG 问答与 sources 返回
 
-上传文档：
+![项目结果截图 5](resultfig/微信图片_20260618215845_380_49.png)
 
-```bash
-curl -X POST "http://localhost:8000/api/documents/upload" \
-  -F "file=@data/samples/ai_intern_job_requirements.txt"
-```
+![项目结果截图 6](resultfig/微信图片_20260618215917_381_49.png)
 
-构建知识库：
+![项目结果截图 7](resultfig/微信图片_20260618224054_388_49.png)
 
-```bash
-curl -X POST "http://localhost:8000/api/knowledge/build" \
-  -H "Content-Type: application/json" \
-  -d '{"doc_ids": []}'
-```
+### OpenWebUI 接入效果
 
-RAG 问答：
+![项目结果截图 8](resultfig/微信图片_20260618230838_390_49.png)
 
-```bash
-curl -X POST "http://localhost:8000/api/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "根据人工智能实习生岗位要求，我需要掌握哪些技术栈？", "top_k": 5}'
-```
+![项目结果截图 9](resultfig/微信图片_20260618231335_391_49.png)
 
-OpenAI-compatible 调用：
+### MCP 工具调用效果
 
-```bash
-curl -X POST "http://localhost:8000/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "rag-mcp-knowledge-platform", "messages": [{"role": "user", "content": "RAG 和普通大模型问答有什么区别？"}]}'
-```
+![项目结果截图 10](resultfig/微信图片_20260618231410_392_49.png)
 
-## 自动测试脚本
+![项目结果截图 11](resultfig/微信图片_20260618231427_393_49.png)
 
-先确保后端已启动，并且已经构建知识库：
+![项目结果截图 12](resultfig/微信图片_20260618231512_394_49.png)
 
-```bash
-PYTHONPATH=backend python3 scripts/build_sample_kb.py
-python3 scripts/test_api.py
-```
+### 自动化验证结果
 
-如果后端不是默认地址：
+![项目结果截图 13](resultfig/微信图片_20260618231824_396_49.png)
 
-```bash
-python3 scripts/test_api.py http://localhost:8000
-```
+![项目结果截图 14](resultfig/微信图片_20260618232501_398_49.png)
 
-## 第三阶段：真实 Embedding 检索
+## 项目特点
 
-项目已支持 Hugging Face `sentence-transformers` 和 Chroma 向量数据库。默认配置：
+- 采用 mock-first 设计，先保证完整链路可运行，再切换真实模型能力。
+- RAG 检索结果返回结构化 sources，便于定位答案来源。
+- OpenWebUI 接入层与内部 RAG 逻辑解耦，前端请求不会绕过知识库检索。
+- Embedding、向量库和 LLM 调用均做了配置化抽象，方便替换模型和存储后端。
+- MCP 工具复用已有知识库检索能力，避免重复实现检索逻辑。
+- 默认保留本地可运行能力，同时支持 Docker Compose 服务编排。
 
-```env
-VECTOR_STORE_TYPE=chroma
-VECTOR_DB_DIR=data/vector_db
-EMBEDDING_MODEL_NAME=BAAI/bge-small-zh-v1.5
-CHUNK_SIZE=800
-CHUNK_OVERLAP=120
-TOP_K=5
-```
+## 当前边界
 
-首次运行真实 embedding 时会自动从 Hugging Face 下载模型，默认使用 CPU，不要求 GPU。向量库数据会持久化保存在：
-
-```text
-data/vector_db/
-```
-
-如果网络不稳定或模型下载较慢，可以切换备用模型：
-
-```env
-EMBEDDING_MODEL_NAME=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-```
-
-如果只想在离线环境验证流程，可以临时使用轻量兜底：
-
-```env
-EMBEDDING_BACKEND=lightweight
-VECTOR_STORE_TYPE=local
-```
-
-主路径仍然是 `sentence-transformers + Chroma`。
-
-## 知识库管理
-
-构建知识库：
-
-```bash
-curl -X POST "http://localhost:8000/api/knowledge/build" \
-  -H "Content-Type: application/json" \
-  -d '{"doc_ids": []}'
-```
-
-重建指定文档：
-
-```bash
-curl -X POST "http://localhost:8000/api/knowledge/rebuild" \
-  -H "Content-Type: application/json" \
-  -d '{"doc_ids": ["your_doc_id"]}'
-```
-
-删除文档及其 chunks：
-
-```bash
-curl -X DELETE "http://localhost:8000/api/documents/your_doc_id"
-```
-
-清空知识库但保留原始上传文档：
-
-```bash
-curl -X DELETE "http://localhost:8000/api/knowledge/clear"
-```
-
-重复构建同一文档时，系统会先删除该文档旧 chunks 和旧向量，再写入新 chunks，避免向量冗余。
-
-## MCP 工具调用能力
-
-第四阶段新增 MCP HTTP fallback 工具服务，目录在 `mcp_server/`。当前提供：
-
-- 知识库统计：`get_kb_stats`
-- 项目文件读取：`read_project_file`
-- SQLite 笔记查询：`query_notes`
-- 知识库检索工具：`search_kb`
-
-初始化数据库和 notes 示例数据：
-
-```bash
-PYTHONPATH=backend python3 scripts/init_db.py
-```
-
-启动 MCP HTTP fallback 服务：
-
-```bash
-PYTHONPATH=backend uvicorn mcp_server.server:app --host 0.0.0.0 --port 9000
-```
-
-测试 MCP 工具：
-
-```bash
-python3 scripts/test_mcp_tools.py
-```
-
-Docker Compose 会同时启动 `mcp-server`，HTTP 端口为 `9000`。
-
-## 项目 Demo 流程
-
-1. 启动后端：`PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000`
-2. 构建示例知识库：`PYTHONPATH=backend python3 scripts/build_sample_kb.py`
-3. 打开 OpenWebUI：http://localhost:3000
-4. 提问：`根据人工智能实习生岗位要求，我需要掌握哪些技术栈？`
-5. 查看回答中的 `sources`
-6. 启动 MCP Server：`PYTHONPATH=backend uvicorn mcp_server.server:app --host 0.0.0.0 --port 9000`
-7. 调用 `get_kb_stats` 和 `search_kb` 工具
-
-## Demo 验证项
-
-建议按以下内容验证项目运行状态：
-
-1. 后端 `/health` 返回正常；
-2. 文档上传成功；
-3. 知识库构建返回 `chunk_count`；
-4. `/api/chat` 返回 `answer` 和 `sources`；
-5. OpenWebUI 中选择 `rag-mcp-knowledge-platform` 并完成问答；
-6. `data/vector_db/` 中生成 Chroma 持久化文件；
-7. MCP 工具调用返回正常；
-8. Docker Compose 服务正常运行。
-
-## 常见问题排查
-
-- `No module named pip`：系统没有 pip。可以安装 `python3-pip`，或使用项目内 `.pyuser` 里的依赖启动。
-- `/api/chat` 返回“知识库为空”：先上传文档并调用 `/api/knowledge/build`，或运行 `scripts/build_sample_kb.py`。
-- API 模式返回“缺少配置”：检查 `.env` 中是否设置 `API_MODEL_BASE_URL`、`API_MODEL_API_KEY`、`API_MODEL_NAME`。
-- Ollama 模式失败：确认执行过 `ollama pull qwen2.5:7b`，并且 `ollama serve` 正在运行。
-- OpenWebUI 连不上后端：检查 Base URL 是否符合部署场景；Docker 内访问本机后端通常用 `http://host.docker.internal:8000/v1`。
-- `stream=true`：当前阶段支持基础 SSE 输出，主要目标是保证 OpenWebUI 不报错。
-- embedding 模型下载慢：改用 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`，或临时设置 `EMBEDDING_BACKEND=lightweight`。
-- Chroma 数据清空：调用 `DELETE /api/knowledge/clear`，或停止服务后删除 `data/vector_db/`。
-- 重复构建文档：现在会先删除该文档旧 chunks，再写入新 chunks，不会重复堆积同一个文档的向量。
+- Chroma 更适合本地演示和中小规模知识库，大规模生产场景需要引入权限、索引治理和分布式向量数据库。
+- mock 模式用于验证流程，不代表真实大模型推理质量。
+- Ollama 和 API 模式的回答质量取决于所选模型能力、上下文长度和提示词设计。
+- MCP 当前提供 HTTP fallback 工具服务，后续可进一步增强为完整官方 MCP SDK 形态。
